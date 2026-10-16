@@ -1,14 +1,16 @@
-fastapi
-uvicorn[standard]
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
 
-sqlalchemy
-asyncpg
-alembic
-psycopg2-binary
-greenlet
+SQLAlchemy==2.1.4
+asyncpg==0.32.0
+alembic==1.20.0
+psycopg2-binary==2.9.13
+greenlet==3.5.6
 
-pydantic-settings
+pydantic-settings==2.16.0
 
-aiogram
+aiogram==3.31.0
 
-qrcode[pil]
+qrcode[pil]==8.2
+opencv-python-headless==5.0.0.93
+numpy==2.5.4

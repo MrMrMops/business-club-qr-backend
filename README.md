@@ -1,269 +1,207 @@
-```markdown
 # Business Club QR Backend
 
-Backend-сервис для начисления бонусных баллов пользователям через одноразовые QR-коды и Telegram-бота.
+Backend-сервис для регистрации гостей мероприятия, выдачи персональных QR-пропусков и начисления баллов при check-in.
 
-Пользователь сканирует QR-код, переходит по Telegram deep link и получает указанное количество баллов. Каждый QR-код может быть использован только один раз.
+Проект включает:
 
-## Возможности
-
-- создание одноразовых QR-кодов;
-- генерация QR-кода в формате PNG;
-- Telegram deep links;
-- автоматическое создание пользователя при первом начислении;
-- начисление бонусных баллов;
-- просмотр текущего баланса через Telegram;
-- защита от повторного использования QR-кода;
-- защита от race condition при одновременном использовании одного QR;
-- хранение данных в PostgreSQL;
-- миграции базы данных через Alembic;
-- запуск проекта через Docker Compose;
-- автоматические тесты бизнес-логики и HTTP API.
-
-## Stack
-
-- Python
-- FastAPI
+- FastAPI API
+- Telegram-бот на aiogram
 - PostgreSQL
+- SQLAlchemy
+- Alembic migrations
+- HMAC-подписанные QR-пропуска
+- распознавание QR-кодов с фотографий через OpenCV
+- историю начисления баллов
+- защиту от повторного check-in
+- Docker / Docker Compose
+- автоматические тесты
+
+## Основной сценарий
+
+### Гость
+
+Гость регистрируется в системе и получает:
+
+- имя;
+- категорию;
+- Telegram ID;
+- персональный `pass_id`;
+- баланс баллов.
+
+В Telegram-боте гость может использовать:
+
+```text
+/qr
+```
+
+Бот отправляет персональный QR-пропуск.
+
+```text
+/balance
+```
+
+Бот показывает текущий баланс.
+
+### Организатор
+
+Организаторы определяются через allowlist Telegram ID:
+
+```env
+ORGANIZER_TELEGRAM_IDS=[123456789,987654321]
+```
+
+Организатор может отправить боту фотографию QR-кода гостя.
+
+Бот:
+
+1. распознаёт QR через OpenCV;
+2. проверяет HMAC-подпись;
+3. находит гостя;
+4. показывает карточку гостя;
+5. показывает текущий баланс;
+6. показывает статус check-in;
+7. позволяет отметить приход и начислить баллы.
+
+Также доступен ручной fallback:
+
+```text
+/check TOKEN
+```
+
+Команда:
+
+```text
+/id
+```
+
+показывает Telegram ID пользователя — это удобно для добавления организаторов в allowlist.
+
+## Check-in
+
+При первом check-in:
+
+- выставляется `checked_in_at`;
+- гостю начисляются баллы;
+- создаётся запись в истории начислений.
+
+Повторный check-in не начисляет баллы ещё раз.
+
+Операция выполняется атомарно на уровне PostgreSQL, поэтому даже при одновременной попытке check-in одного гостя баллы будут начислены только один раз.
+
+## История начислений
+
+Каждое начисление хранится в таблице `point_transactions`.
+
+Для операции записываются:
+
+- гость;
+- Telegram ID организатора;
+- количество начисленных баллов;
+- причина;
+- время начисления.
+
+Для check-in используется причина:
+
+```text
+event_checkin
+```
+
+## Безопасность QR-пропуска
+
+QR-код не содержит обычный ID гостя.
+
+Для каждого гостя генерируется случайный `pass_id`.
+
+Из него создаётся подписанный токен:
+
+```text
+pass_id.HMAC_SIGNATURE
+```
+
+Подпись создаётся с помощью HMAC-SHA256 и секрета:
+
+```env
+PASS_TOKEN_SECRET=...
+```
+
+Изменённый или поддельный токен не проходит проверку.
+
+## Технологии
+
+- Python 3.12
+- FastAPI
+- PostgreSQL 17
 - SQLAlchemy
 - asyncpg
 - Alembic
 - aiogram
-- Pydantic Settings
+- OpenCV
+- qrcode
 - pytest
-- pytest-asyncio
-- httpx
 - Docker
 - Docker Compose
 
-## Архитектура
+## Запуск
 
-```text
-                 ┌─────────────────┐
-                 │   Telegram Bot  │
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │ Business Logic  │
-                 │    Services     │
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │   SQLAlchemy    │
-                 └────────┬────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │   PostgreSQL    │
-                 └─────────────────┘
+### 1. Клонировать репозиторий
 
-FastAPI ───────► Business Logic
+```bash
+git clone https://github.com/MrMrMops/business-club-qr-backend.git
+cd business-club-qr-backend
 ```
 
-## Структура проекта
+### 2. Создать `.env`
 
-```text
-app/
-├── api/
-│   └── routes/
-│       ├── health.py
-│       └── qr.py
-│
-├── bot/
-│   ├── bot.py
-│   └── handlers.py
-│
-├── core/
-│   └── config.py
-│
-├── db/
-│   ├── base.py
-│   ├── database.py
-│   └── models.py
-│
-├── schemas/
-│   └── qr.py
-│
-├── services/
-│   ├── qr_service.py
-│   └── qr_image_service.py
-│
-└── main.py
-
-alembic/
-tests/
-
-Dockerfile
-docker-compose.yml
-requirements.txt
-requirements-dev.txt
-.env.example
-alembic.ini
+```bash
+cp .env.example .env
 ```
 
-## Основная логика
-
-При создании QR-кода генерируется криптографически случайный token.
-
-Количество начисляемых баллов хранится в базе данных и не передаётся внутри QR-кода, поэтому пользователь не может изменить количество баллов путём изменения ссылки.
-
-QR-код содержит Telegram deep link:
-
-```text
-https://t.me/BOT_USERNAME?start=TOKEN
-```
-
-После перехода Telegram-бот получает token и вызывает сервис начисления баллов.
-
-Сценарий:
-
-```text
-Создание QR
-    ↓
-Генерация случайного token
-    ↓
-Сохранение token и points в PostgreSQL
-    ↓
-Генерация Telegram deep link
-    ↓
-Пользователь сканирует QR
-    ↓
-Telegram /start TOKEN
-    ↓
-Проверка QR
-    ↓
-Начисление баллов
-    ↓
-QR помечается использованным
-```
-
-## Защита от повторного использования
-
-QR-код может быть использован только один раз.
-
-При использовании выполняется атомарный SQL UPDATE с условием:
-
-```text
-used_at IS NULL
-```
-
-То есть QR помечается использованным только в том случае, если ранее он не был использован.
-
-Это также защищает от race condition.
-
-Например, если два запроса одновременно пытаются использовать один QR:
-
-```text
-Request A ──┐
-            ├──► PostgreSQL
-Request B ──┘
-```
-
-только один запрос сможет изменить строку:
-
-```text
-Request A → QR успешно использован → +100 points
-Request B → QR уже использован
-```
-
-Итоговый баланс:
-
-```text
-100
-```
-
-а не:
-
-```text
-200
-```
-
-Эта ситуация отдельно проверяется автоматическим concurrency-тестом.
-
-## Модели базы данных
-
-### User
-
-```text
-id
-telegram_id
-username
-points
-created_at
-```
-
-`telegram_id` является уникальным.
-
-Для `points` действует ограничение:
-
-```text
-points >= 0
-```
-
-### QRCode
-
-```text
-id
-token
-points
-used_by_user_id
-created_at
-used_at
-```
-
-`token` является уникальным.
-
-Для количества начисляемых баллов действует ограничение:
-
-```text
-points > 0
-```
-
-`used_by_user_id` связан с таблицей пользователей через Foreign Key.
-
-## Environment variables
-
-Создайте файл `.env` на основе `.env.example`.
-
-Пример:
+Заполнить:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://business_user:business_password@localhost:5432/business_club
 
 TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_BOT_USERNAME=your_bot_username
+
+PASS_TOKEN_SECRET=your_secret_key
+
+ORGANIZER_TELEGRAM_IDS=[123456789]
+CHECKIN_POINTS=100
 ```
 
-Настоящий `.env` не должен попадать в Git.
-
-## Запуск через Docker Compose
-
-Для запуска необходим Docker.
-
-Соберите и запустите проект:
+Для генерации секрета, например:
 
 ```bash
-docker compose up --build
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Docker Compose запускает:
+### 3. Собрать проект
 
-```text
-PostgreSQL
-Alembic migrations
-FastAPI
-Telegram Bot
+```bash
+docker compose build
 ```
 
-Миграции выполняются автоматически перед запуском API и бота.
+### 4. Запустить
 
-После запуска FastAPI доступен по адресу:
-
-```text
-http://localhost:8000
+```bash
+docker compose up -d
 ```
+
+Docker Compose:
+
+- запускает PostgreSQL;
+- выполняет Alembic migrations;
+- запускает FastAPI;
+- запускает Telegram-бота.
+
+Проверить состояние:
+
+```bash
+docker compose ps
+```
+
+## API
 
 Swagger:
 
@@ -271,65 +209,21 @@ Swagger:
 http://localhost:8000/docs
 ```
 
-Остановить проект:
-
-```bash
-docker compose down
-```
-
-Запустить в фоне:
-
-```bash
-docker compose up -d
-```
-
-Посмотреть состояние сервисов:
-
-```bash
-docker compose ps
-```
-
-Посмотреть логи:
-
-```bash
-docker compose logs -f
-```
-
-## API
-
-### Health check
+### Создание гостя
 
 ```http
-GET /
+POST /guests
 ```
 
-Пример ответа:
+Пример:
 
 ```json
 {
-  "status": "ok"
+  "name": "Test Guest",
+  "category": "guest",
+  "telegram_id": 123456789,
+  "username": "test_user"
 }
-```
-
-### Database check
-
-```http
-GET /db-check
-```
-
-Пример ответа:
-
-```json
-{
-  "database": "ok",
-  "result": 1
-}
-```
-
-### Создание QR-token
-
-```http
-POST /qr?points=100
 ```
 
 Пример ответа:
@@ -337,255 +231,126 @@ POST /qr?points=100
 ```json
 {
   "id": 1,
-  "token": "generated_token",
-  "points": 100
-}
-```
-
-Параметр `points` должен быть больше нуля.
-
-Попытка отправить:
-
-```text
-points = -100
-```
-
-будет отклонена FastAPI validation.
-
-### Создание PNG QR-кода
-
-```http
-POST /qr/image?points=100
-```
-
-Endpoint создаёт QR в базе данных и возвращает PNG-изображение.
-
-Внутри изображения находится Telegram deep link:
-
-```text
-https://t.me/BOT_USERNAME?start=TOKEN
-```
-
-### Использование QR
-
-```http
-POST /qr/{token}/redeem
-```
-
-Пример body:
-
-```json
-{
+  "name": "Test Guest",
+  "category": "guest",
   "telegram_id": 123456789,
-  "username": "example"
+  "username": "test_user",
+  "points": 0
 }
 ```
 
-Успешный ответ:
+Повторная регистрация того же Telegram ID возвращает:
 
-```json
-{
-  "qr_id": 1,
-  "points_added": 100,
-  "balance": 100
-}
-```
-
-Если QR уже использован:
-
-```http
+```text
 409 Conflict
-```
-
-```json
-{
-  "detail": "QR code already used"
-}
-```
-
-Если token не существует:
-
-```http
-404 Not Found
-```
-
-```json
-{
-  "detail": "QR code not found"
-}
 ```
 
 ## Telegram Bot
 
-Основные команды:
+Команды:
 
 ```text
-/start
-/balance
+/qr       — получить персональный QR-пропуск
+/balance  — посмотреть баланс
+/id       — узнать свой Telegram ID
+/check    — ручная проверка токена организатором
 ```
 
-Обычный `/start` выводит приветственное сообщение.
+Обычный пользователь не имеет доступа к функциям организатора.
 
-Команда:
+## Структура данных
 
-```text
-/balance
-```
+### users
 
-показывает текущий баланс пользователя.
+Хранит:
 
-При переходе по deep link вида:
+- Telegram ID;
+- username;
+- имя;
+- категорию;
+- персональный `pass_id`;
+- баланс;
+- время check-in.
 
-```text
-https://t.me/BOT_USERNAME?start=TOKEN
-```
+### point_transactions
 
-бот получает token и пытается активировать QR-код.
+Хранит историю начислений:
 
-При успешном начислении пользователь получает сообщение:
-
-```text
-Начислено: 100 баллов.
-Текущий баланс: 100.
-```
-
-При повторном использовании:
-
-```text
-Этот QR-код уже был использован.
-```
+- guest ID;
+- organizer Telegram ID;
+- amount;
+- reason;
+- created_at.
 
 ## Миграции
 
-Для управления схемой базы данных используется Alembic.
-
-Применить все миграции вручную:
+Применить все миграции:
 
 ```bash
 alembic upgrade head
 ```
 
-Создать новую миграцию:
+Откатить:
 
 ```bash
-alembic revision --autogenerate -m "migration name"
+alembic downgrade base
 ```
 
-При запуске через Docker Compose миграции применяются автоматически.
+И снова применить:
+
+```bash
+alembic upgrade head
+```
 
 ## Тесты
 
-Для тестов используется отдельная база:
+Для тестов используется отдельная PostgreSQL database:
 
 ```text
 business_club_test
 ```
 
-Если она ещё не создана и PostgreSQL запущен через Docker Compose:
+Создать её:
 
 ```bash
 docker compose exec db createdb -U business_user business_club_test
 ```
 
-Установить зависимости для разработки:
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Запустить все тесты:
+Запустить тесты:
 
 ```bash
 pytest -v
 ```
 
-Проект содержит тесты:
+Тесты проверяют:
 
-- создания QR;
-- сохранения QR в PostgreSQL;
-- первого использования QR;
-- повторного использования QR;
-- корректного баланса пользователя;
-- одновременного использования QR двумя запросами;
-- создания QR через HTTP API;
-- валидации количества баллов;
-- HTTP 404 для неизвестного QR;
-- HTTP 409 для уже использованного QR;
-- генерации PNG QR-кода.
+- создание гостя;
+- уникальность Telegram ID;
+- HMAC-подпись пропуска;
+- обнаружение подделанного токена;
+- поиск гостя по QR-пропуску;
+- начисление баллов;
+- сохранение истории начислений;
+- запрет повторного check-in;
+- конкурентный check-in;
+- генерацию QR-кода;
+- распознавание QR-кода;
+- FastAPI endpoints и validation.
 
-Особое внимание уделено concurrency-тесту, который запускает два одновременных запроса на использование одного QR и проверяет, что баллы начисляются только один раз.
+## Проверенный сценарий
 
-## Security
-
-Реализованы:
-
-- криптографически случайные QR tokens;
-- уникальность token на уровне PostgreSQL;
-- атомарное использование QR;
-- защита от повторного начисления;
-- Foreign Key между QR и пользователем;
-- database constraints для количества баллов;
-- хранение секретов через environment variables;
-- `.env` исключён из Git.
-
-В текущей версии endpoints создания QR не защищены административной авторизацией.
-
-Для production-использования необходимо добавить authentication/authorization для endpoints:
+Проект проверен с чистой PostgreSQL database:
 
 ```text
-POST /qr
-POST /qr/image
+Docker build
+→ PostgreSQL
+→ Alembic upgrade
+→ FastAPI
+→ Telegram bot
+→ QR scan
+→ check-in
+→ PointTransaction
+→ pytest
 ```
 
-чтобы создавать QR-коды могли только администраторы.
-
-## Запуск проекта с нуля
-
-```bash
-git clone <repository-url>
-
-cd business-club-qr-backend
-
-cp .env.example .env
-```
-
-Заполните:
-
-```text
-TELEGRAM_BOT_TOKEN
-TELEGRAM_BOT_USERNAME
-```
-
-Затем:
-
-```bash
-docker compose up --build
-```
-
-После запуска:
-
-```text
-Swagger:
-http://localhost:8000/docs
-```
-
-Telegram-бот также начинает polling автоматически.
-
-## Возможные дальнейшие улучшения
-
-- авторизация администратора;
-- роли пользователей;
-- отдельная административная панель;
-- срок действия QR-кодов;
-- история начислений;
-- возможность отмены начисления;
-- rate limiting;
-- structured logging;
-- CI/CD;
-- автоматический запуск тестов через GitHub Actions;
-- production deployment.
-
-## License
-
-Project created as a backend test assignment.
-```
+Повторный check-in не приводит к повторному начислению баллов.

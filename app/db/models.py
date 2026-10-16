@@ -41,36 +41,20 @@ class User(Base):
         nullable=True,
     )
 
-    points: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
+    # Данные гостя по ТЗ
+    name: Mapped[str] = mapped_column(
+        String(255),
         nullable=False,
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
+    category: Mapped[str] = mapped_column(
+        String(100),
         nullable=False,
     )
 
-
-    
-class QRCode(Base):
-    __tablename__ = "qr_codes"
-
-    __table_args__ = (
-        CheckConstraint(
-            "points > 0",
-            name="check_qr_points_positive",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-    )
-
-    token: Mapped[str] = mapped_column(
+    # Внутренний случайный идентификатор персонального пропуска.
+    # Позже именно его будем подписывать HMAC.
+    pass_id: Mapped[str] = mapped_column(
         String(255),
         unique=True,
         nullable=False,
@@ -79,11 +63,13 @@ class QRCode(Base):
 
     points: Mapped[int] = mapped_column(
         Integer,
+        default=0,
         nullable=False,
     )
 
-    used_by_user_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("users.id"),
+    # None = гость ещё не отмечен на мероприятии
+    checked_in_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
 
@@ -93,7 +79,50 @@ class QRCode(Base):
         nullable=False,
     )
 
-    used_at: Mapped[Optional[datetime]] = mapped_column(
+
+class PointTransaction(Base):
+    __tablename__ = "point_transactions"
+
+    __table_args__ = (
+        CheckConstraint(
+            "amount > 0",
+            name="check_point_transaction_amount_positive",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+
+    # Кому начислили
+    guest_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    # Кто начислил
+    organizer_telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+    )
+
+    # Сколько
+    amount: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    # За что
+    reason: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    # Когда
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=True,
+        server_default=func.now(),
+        nullable=False,
     )
