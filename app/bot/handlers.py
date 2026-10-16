@@ -1,6 +1,5 @@
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import BufferedInputFile, Message
 from sqlalchemy import select
 from io import BytesIO
 
@@ -12,7 +11,6 @@ from app.services.pass_token_service import create_pass_token
 from app.services.qr_image_service import generate_qr_image
 
 from aiogram.filters.command import CommandObject
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.core.config import settings
 from app.services.guest_service import get_guest_by_pass_token
@@ -272,7 +270,11 @@ async def checkin_callback(callback: CallbackQuery):
         )
 
 
-@router.callback_query(lambda callback: callback.data.startswith("checkin:"))
+@router.callback_query(
+    lambda callback: (
+        callback.data is not None
+        and callback.data.startswith("checkin:")
+    ))
 async def checkin_callback(callback: CallbackQuery):
     if callback.from_user is None:
         return

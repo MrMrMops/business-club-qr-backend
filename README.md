@@ -302,6 +302,22 @@ alembic downgrade base
 alembic upgrade head
 ```
 
+## Локальная установка для разработки и тестов
+
+Для запуска тестов локально создайте виртуальное окружение и установите dev-зависимости:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+Убедитесь, что PostgreSQL запущен:
+
+```bash
+docker compose up -d db
+```
+
 ## Тесты
 
 Для тестов используется отдельная PostgreSQL database:

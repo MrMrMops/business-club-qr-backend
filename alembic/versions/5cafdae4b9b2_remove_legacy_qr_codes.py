@@ -1,7 +1,7 @@
 """remove legacy qr codes
 
 Revision ID: 5cafdae4b9b2
-Revises: 61ca11298945
+Revises: 473ba9352566
 Create Date: 2026-10-16 15:37:16.266659
 
 """

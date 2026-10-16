@@ -53,7 +53,7 @@ class User(Base):
     )
 
     # Внутренний случайный идентификатор персонального пропуска.
-    # Позже именно его будем подписывать HMAC.
+    # Используется как payload HMAC-подписанного токена.
     pass_id: Mapped[str] = mapped_column(
         String(255),
         unique=True,
