@@ -208,73 +208,12 @@ async def check_guest_handler(
         reply_markup=keyboard,
     )
 
-@router.callback_query(lambda callback: callback.data.startswith("checkin:"))
-async def checkin_callback(callback: CallbackQuery):
-    if callback.from_user is None:
-        return
-
-    if not is_organizer(callback.from_user.id):
-        await callback.answer(
-            "Доступно только организаторам.",
-            show_alert=True,
-        )
-        return
-
-    if callback.data is None:
-        return
-
-    try:
-        guest_id = int(callback.data.split(":", 1)[1])
-    except (ValueError, IndexError):
-        await callback.answer(
-            "Некорректные данные.",
-            show_alert=True,
-        )
-        return
-
-    async with SessionLocal() as session:
-        try:
-            result = await check_in_guest(
-                session=session,
-                guest_id=guest_id,
-                organizer_telegram_id=callback.from_user.id,
-            )
-
-        except GuestNotFoundError:
-            await callback.answer(
-                "Гость не найден.",
-                show_alert=True,
-            )
-            return
-
-        except AlreadyCheckedInError:
-            await callback.answer(
-                "Приход этого гостя уже был отмечен.",
-                show_alert=True,
-            )
-            return
-
-    await callback.answer(
-        "Приход отмечен, баллы начислены."
-    )
-
-    if callback.message is not None:
-        await callback.message.edit_text(
-            (
-                "Карточка гостя\n\n"
-                f"Имя: {result['guest_name']}\n"
-                f"Баллы: {result['balance']}\n"
-                "Приход: ✅ Отмечен\n\n"
-                f"Начислено: +{result['points_added']} баллов"
-            )
-        )
-
-
 @router.callback_query(
     lambda callback: (
         callback.data is not None
         and callback.data.startswith("checkin:")
-    ))
+        )q
+    )
 async def checkin_callback(callback: CallbackQuery):
     if callback.from_user is None:
         return
