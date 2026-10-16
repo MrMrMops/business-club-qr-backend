@@ -212,7 +212,7 @@ async def check_guest_handler(
     lambda callback: (
         callback.data is not None
         and callback.data.startswith("checkin:")
-        )q
+        )
     )
 async def checkin_callback(callback: CallbackQuery):
     if callback.from_user is None:
